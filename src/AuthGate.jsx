@@ -3,10 +3,8 @@ import { useEffect, useState } from 'react';
 import { supabase } from './lib/supabase';
 
 /**
- * 行為：
- * - 只允許「已存在（被邀請）」的帳號：shouldCreateUser:false
- * - 信件點回來時，自動把網址中的 token/code 交換成 Session（exchangeCodeForSession）
- * - 初始時先 getSession，再監聽 onAuthStateChange
+ * AuthGate：未登入顯示 Email 登入畫面；登入後顯示 children。
+ * 關鍵：signInWithOtp(..., { shouldCreateUser:false }) 只允許已存在（被邀請）帳號登入
  */
 export default function AuthGate({ children }) {
   const [session, setSession] = useState(null);
@@ -43,20 +41,22 @@ function EmailLogin() {
   const [sent, setSent] = useState(false);
   const [msg, setMsg] = useState('');
 
-  // 讓回跳網址「完全等於目前頁面」（含 /couple-diary/ 之類路徑）
-  const redirectTo = `${window.location.origin}${window.location.pathname}`;
+  // 依環境自動決定回跳網址（本地/上線都可）
+  const redirectTo = process.env.NODE_ENV === "development"
+    ? "http://localhost:5173"
+    : `${window.location.origin}${window.location.pathname}`;
 
   async function sendMagicLink() {
     setMsg('');
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        shouldCreateUser: false,     // ⛔ 不自動註冊，只允許已存在（被邀請）的帳號
-        emailRedirectTo: redirectTo  // ✅ 信件點回來就回到此頁
+        shouldCreateUser: false,           // 只允許已存在（已被邀請）的帳號
+        emailRedirectTo: redirectTo        // 登入後回到目前站點
       }
     });
     if (error) {
-      // 常見：Signups not allowed（帳號不存在或沒被邀請）
+      // 常見錯誤：Signups not allowed（帳號不存在或沒被邀請）
       setMsg(error.message);
       alert(error.message);
     } else {
@@ -75,6 +75,7 @@ function EmailLogin() {
       <p style={{ fontSize: 12, color: '#666', marginBottom: 12 }}>
         僅限受邀信箱（必須先在 Supabase 後台 Invite）
       </p>
+
       <input
         type="email"
         placeholder="your@email.com"
@@ -88,6 +89,7 @@ function EmailLogin() {
       >
         寄送登入連結
       </button>
+
       {msg && <div style={{ marginTop: 12, fontSize: 12, color: '#c00' }}>{msg}</div>}
     </div>
   );
